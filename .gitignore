@@ -1,0 +1,25 @@
+.venv/
+__pycache__/
+*.py[cod]
+dist/
+build/
+*.egg-info/
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+# Project assets and personal reference selections do not belong in this repository.
+*.rvt
+*.rfa
+*.dwg
+*.ifc
+*.pdf
+*.pptx
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.zip
+private/
+selected-references*.json

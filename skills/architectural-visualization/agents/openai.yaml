@@ -1,0 +1,7 @@
+interface:
+  display_name: "Архитектура: референсы и визуализации"
+  short_description: "Онлайн-референсы, концепция и согласованные ракурсы"
+  default_prompt: "Используй $architectural-visualization, чтобы подобрать референсы онлайн и разработать концепцию с сохранением геометрии моей модели."
+policy:
+  allow_implicit_invocation: true
+

@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "archviz-mcp"
+version = "0.1.0"
+description = "Live architectural reference research through MCP, without a local image archive"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+  "mcp>=1.30,<2",
+  "httpx>=0.28,<0.29",
+  "beautifulsoup4>=4.15,<5",
+  "Pillow>=12.3,<13",
+]
+
+[project.scripts]
+archviz-mcp = "server:main"
+
+[project.urls]
+Repository = "https://github.com/proovcme/archviz_mcp"
+Issues = "https://github.com/proovcme/archviz_mcp/issues"
+
+[tool.hatch.build.targets.wheel]
+include = ["server.py", "skills/**"]
+
+[tool.hatch.build.targets.sdist]
+include = ["server.py", "test_server.py", "skills/**", "README.md", "LICENSE", "pyproject.toml", "uv.lock"]
