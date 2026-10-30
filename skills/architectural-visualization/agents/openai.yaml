@@ -1,7 +1,7 @@
 interface:
   display_name: "Архитектура: референсы и визуализации"
-  short_description: "Онлайн-референсы, концепция и согласованные ракурсы"
-  default_prompt: "Используй $architectural-visualization, чтобы подобрать референсы онлайн и разработать концепцию с сохранением геометрии моей модели."
+  short_description: "Референсы, пробный кадр и проверяемая серия по BIM"
+  default_prompt: "Используй $architectural-visualization для визуализаций по моей модели: раздели геометрию и фотографическую подачу, подготовь пробный кадр и проверь каждый ракурс серии."
 policy:
   allow_implicit_invocation: true
 
