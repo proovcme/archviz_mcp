@@ -10,7 +10,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from pydantic import ValidationError
 
-from visualization import Series, check_series, context_hash
+from visualization import Series, check_series, context_hash, consistency_context_hash
 
 
 def snapshot(name, char="a"):
@@ -37,6 +37,7 @@ def review_all(data):
     for candidate, payload in zip(series.candidates, data["candidates"]):
         payload["review"] = {
             "context_sha256": context_hash(candidate, series),
+            "consistency_context_sha256": consistency_context_hash(series),
             "geometry": {"status": "pass", "observations": ["Compared openings and canopy to source."]},
             "appearance": {"status": "pass", "observations": ["Inspected light coherence and material response."]},
             "series_consistency": {"status": "pass", "observations": ["Compared shared facade and palette."]},
@@ -161,6 +162,73 @@ class ReviewGateChecks(unittest.TestCase):
         review_all(data)
         self.assertTrue(evaluate(data)["can_release_selection"])
 
+    def test_changed_selection_requires_fresh_cross_view_review(self):
+        data = brief()
+        data["cameras"].append({"camera_id": "garden", "sha256": "e" * 64, "description": "Garden"})
+        garden = copy.deepcopy(data["candidates"][0])
+        garden.update(candidate_id="garden", camera_id="garden", camera_sha256="e" * 64,
+                      image=snapshot("garden-image", "f"))
+        alternative = copy.deepcopy(garden)
+        alternative.update(candidate_id="alternative", image=snapshot("alternative-image", "1"))
+        data["candidates"].extend([garden, alternative])
+        data["selected_candidate_ids"].append("garden")
+        accept(review_all(data))
+        self.assertTrue(evaluate(data)["can_release_selection"])
+        pilot_review = copy.deepcopy(data["candidates"][0]["review"])
+        data["selected_candidate_ids"] = ["pilot", "alternative"]
+        result = evaluate(data)
+        self.assertTrue(result["can_expand_series"])
+        self.assertTrue(result["pilot"]["reported_user_acceptance"])
+        self.assertFalse(result["can_release_selection"])
+        self.assertIn("pilot:series_consistency_stale", result["release_blockers"])
+        self.assertIn("alternative:series_consistency_stale", result["release_blockers"])
+        self.assertEqual(data["candidates"][0]["review"], pilot_review)
+        # Refresh only the cross-view review after comparing the new selection.
+        for candidate in data["candidates"]:
+            if candidate["candidate_id"] in data["selected_candidate_ids"]:
+                candidate["review"]["consistency_context_sha256"] = result["consistency_context_sha256"]
+                candidate["review"]["series_consistency"]["observations"] = ["Compared pilot with alternative."]
+        self.assertTrue(evaluate(data)["can_release_selection"])
+
+    def test_replaced_peer_image_invalidates_other_cross_view_reviews(self):
+        data = brief()
+        data["cameras"].append({"camera_id": "garden", "sha256": "e" * 64, "description": "Garden"})
+        garden = copy.deepcopy(data["candidates"][0])
+        garden.update(candidate_id="garden", camera_id="garden", camera_sha256="e" * 64,
+                      image=snapshot("garden-image", "f"))
+        data["candidates"].append(garden); data["selected_candidate_ids"].append("garden")
+        accept(review_all(data))
+        data["candidates"][1]["image"]["sha256"] = "1" * 64
+        result = evaluate(data)
+        self.assertIn("pilot:series_consistency_stale", result["release_blockers"])
+        self.assertIn("garden:visual_review_stale", result["release_blockers"])
+        self.assertTrue(result["can_expand_series"])
+
+    def test_consistency_context_ignores_order_and_unselected_history(self):
+        data = brief()
+        original = consistency_context_hash(Series.model_validate(data))
+        draft = copy.deepcopy(data["candidates"][0])
+        draft.update(candidate_id="discarded", image=snapshot("discarded", "f"))
+        data["candidates"].insert(0, draft)
+        self.assertEqual(original, consistency_context_hash(Series.model_validate(data)))
+        data["selected_candidate_ids"].append("discarded")
+        selected = consistency_context_hash(Series.model_validate(data))
+        self.assertNotEqual(original, selected)
+        data["selected_candidate_ids"].reverse(); data["candidates"].reverse()
+        self.assertEqual(selected, consistency_context_hash(Series.model_validate(data)))
+
+    def test_legacy_review_without_selection_context_cannot_release_multiple_views(self):
+        data = brief()
+        data["cameras"].append({"camera_id": "garden", "sha256": "e" * 64, "description": "Garden"})
+        garden = copy.deepcopy(data["candidates"][0])
+        garden.update(candidate_id="garden", camera_id="garden", camera_sha256="e" * 64,
+                      image=snapshot("garden-image", "f"))
+        data["candidates"].append(garden); data["selected_candidate_ids"].append("garden")
+        accept(review_all(data))
+        for candidate in data["candidates"]:
+            del candidate["review"]["consistency_context_sha256"]
+        self.assertFalse(evaluate(data)["can_release_selection"])
+
     def test_strict_geometry_requires_recorded_shared_scene(self):
         data = brief(); data["strict_geometry"] = True; accept(review_all(data))
         self.assertIn("strict_geometry_requires_scene_render", evaluate(data)["pilot"]["blockers"])
@@ -197,6 +265,8 @@ class ProtocolChecks(unittest.IsolatedAsyncioTestCase):
                 initial = await session.call_tool("check_visualization_series", {"series": data})
                 self.assertFalse(initial.isError, initial.content)
                 context = unpack(initial)["candidates"][0]["review_context_sha256"]
+                self.assertEqual(unpack(initial)["consistency_context_sha256"],
+                                 consistency_context_hash(Series.model_validate(data)))
                 review_all(data)
                 self.assertEqual(data["candidates"][0]["review"]["context_sha256"], context)
                 unapproved = await session.call_tool("check_visualization_series", {"series": data})

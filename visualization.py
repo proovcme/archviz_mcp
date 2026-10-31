@@ -52,6 +52,7 @@ class Check(Contract):
 class Review(Contract):
     """Host-supplied visual judgments, bound to the exact image AND its inputs."""
     context_sha256: Digest = Field(pattern=r"^[0-9a-f]{64}$")
+    consistency_context_sha256: Digest | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     geometry: Check = Field(default_factory=Check)
     appearance: Check = Field(default_factory=Check)
     series_consistency: Check = Field(default_factory=Check)
@@ -127,6 +128,21 @@ def context_hash(candidate: Candidate, series: Series) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
 
 
+def consistency_context_hash(series: Series) -> str:
+    """Bind cross-view review to the selected revisions and pilot, independent of order."""
+    by_id = {c.candidate_id: c for c in series.candidates}
+    ids = set(series.selected_candidate_ids)
+    if series.pilot_candidate_id is not None:
+        ids.add(series.pilot_candidate_id)
+    value = {
+        "selected_candidate_ids": sorted(series.selected_candidate_ids),
+        "pilot_candidate_id": series.pilot_candidate_id,
+        "contexts": {cid: context_hash(by_id[cid], series) if cid in by_id else None
+                     for cid in sorted(ids)},
+    }
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+
+
 def user_decision(series: Series, image: Snapshot, scope: str) -> str | None:
     """Only explicit reported USER feedback on these exact bytes counts."""
     matching = [f for f in series.feedback if f.author == "user" and f.image == image
@@ -164,6 +180,8 @@ def candidate_blockers(series: Series, candidate: Candidate, consistency: bool =
     elif review.context_sha256 != context_hash(candidate, series):
         blockers.append("visual_review_stale")
     else:
+        if consistency and review.consistency_context_sha256 != consistency_context_hash(series):
+            blockers.append("series_consistency_stale")
         for axis in ("geometry", "appearance") + (("series_consistency",) if consistency else ()):
             status = getattr(review, axis).status
             if status != "pass":
@@ -214,6 +232,7 @@ def check_series(series: Series) -> dict:
                   "reported_user_acceptance": accepted, "reported_user_waiver": waived,
                   "blockers": pilot_blockers},
         "release_blockers": release_blockers, "candidates": rows,
+        "consistency_context_sha256": consistency_context_hash(series),
         "assessment_boundary": "Validates host-supplied records, not photographic quality, file bytes, "
                                "actual renderer execution or authenticity of user quotes. "
                                "No numeric realism score. Inspect pixels and verify feedback in conversation.",

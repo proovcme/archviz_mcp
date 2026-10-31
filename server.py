@@ -50,7 +50,8 @@ def visualization_workflow() -> dict:
 @mcp.tool(annotations=LOCAL_REVIEW)
 def check_visualization_series(series: Series) -> dict:
     """Check pilot acceptance, input revisions, separate visual reviews and selected camera coverage.
-    Inspect pixels FIRST. Returns review_context_sha256 for each candidate; bind a visual review to it.
+    Inspect pixels FIRST. Returns review_context_sha256 for each candidate and consistency_context_sha256
+    for the selected set and pilot; bind visual reviews and cross-view comparison to their respective hashes.
     User quotes/approvals are reported host evidence, not authenticated by this server. No beauty score,
     image generation, file I/O or automatic proof of photorealism. Rejected drafts may stay in history."""
     return check_series(series)
