@@ -23,3 +23,4 @@ Thumbs.db
 *.zip
 private/
 selected-references*.json
+archviz-series*.json

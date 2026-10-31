@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "archviz-mcp"
-version = "0.1.0"
-description = "Live architectural reference research through MCP, without a local image archive"
+version = "0.2.0"
+description = "Live architectural references and stateless visualization review through MCP"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -14,6 +14,7 @@ dependencies = [
   "httpx>=0.28,<0.29",
   "beautifulsoup4>=4.15,<5",
   "Pillow>=12.3,<13",
+  "pydantic>=2.11,<3",
 ]
 
 [project.scripts]
@@ -24,7 +25,7 @@ Repository = "https://github.com/proovcme/archviz_mcp"
 Issues = "https://github.com/proovcme/archviz_mcp/issues"
 
 [tool.hatch.build.targets.wheel]
-include = ["server.py", "skills/**"]
+include = ["server.py", "visualization.py", "skills/**"]
 
 [tool.hatch.build.targets.sdist]
-include = ["server.py", "test_server.py", "skills/**", "README.md", "LICENSE", "pyproject.toml", "uv.lock"]
+include = ["server.py", "visualization.py", "test_server.py", "test_visualization.py", "skills/**", "README.md", "LICENSE", "pyproject.toml", "uv.lock"]

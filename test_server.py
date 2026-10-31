@@ -1,12 +1,18 @@
 import asyncio, json, sys, unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 from bs4 import BeautifulSoup
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-from server import parse_project, parse_search, safe_url
+import httpx
+from server import error_result, parse_project, parse_search, safe_url, view_reference_image
 ROOT=Path(__file__).parent
 
 class ParserChecks(unittest.TestCase):
+    def test_empty_network_exception_has_useful_diagnostic(self):
+        result=error_result(httpx.ReadTimeout(""))
+        self.assertEqual(result["status"],"source_unavailable")
+        self.assertEqual(result["error"],"ReadTimeout")
     def test_reject_non_source_urls(self):
         for url in ["http://www.officenext.ru/projects/project-1-test/",
                     "https://officenext.ru.evil.test/projects/project-1-test/",
@@ -44,6 +50,16 @@ class ParserChecks(unittest.TestCase):
         self.assertFalse(r["focus_match_found"])
         self.assertEqual(r["source_excerpts"],["Reception desk."])
 
+class ImageFailureChecks(unittest.IsolatedAsyncioTestCase):
+    async def test_photo_timeout_returns_explicit_failure_without_image(self):
+        project={"status":"ok","images":[{"url":"https://www.officenext.ru/upload/a.jpg"}]}
+        with patch("server.read_reference",new=AsyncMock(return_value=project)), patch("server.fetch_bytes",new=AsyncMock(side_effect=httpx.ReadTimeout(""))):
+            result=await view_reference_image("https://www.officenext.ru/projects/project-1-test/")
+        self.assertEqual([c.type for c in result],["text"])
+        error=json.loads(result[0].text)
+        self.assertEqual(error["status"],"source_unavailable")
+        self.assertEqual(error["error"],"ReadTimeout")
+
 async def smoke():
     params=StdioServerParameters(command=sys.executable,args=[str(ROOT/"server.py")])
     report={"protocol":"stdio MCP","queries":[]}
@@ -52,7 +68,8 @@ async def smoke():
             init=await session.initialize()
             listed=await session.list_tools()
             report["tools"]=[t.name for t in listed.tools]
-            assert len(report["tools"])==4
+            assert {"reference_sources", "search_references", "read_reference", "view_reference_image",
+                    "visualization_workflow", "check_visualization_series"} <= set(report["tools"])
             for q in ["акустика","вестибюль","кабинет"]:
                 response=await session.call_tool("search_references",{"query":q,"limit":3})
                 assert not response.isError
@@ -68,8 +85,9 @@ async def smoke():
                     "url":doc["url"],"architect":doc["architect"],"images":doc["image_count"],
                     "focus_match_found":doc["focus_match_found"]})
             photo=await session.call_tool("view_reference_image",{"project_url":report["queries"][0]["url"],"image_index":0})
-            assert not photo.isError
-            image=next(c for c in photo.content if c.type=="image")
+            assert not photo.isError, [c.text for c in photo.content if c.type=="text"]
+            image=next((c for c in photo.content if c.type=="image"),None)
+            assert image is not None,[c.text for c in photo.content if c.type=="text"]
             assert len(image.data)>1000 and image.mimeType=="image/jpeg"
             report["image_in_memory_verified"]=True
             bad=await session.call_tool("read_reference",{"url":"https://localhost/"})

@@ -34,13 +34,14 @@ wheels = [
 
 [[package]]
 name = "archviz-mcp"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "httpx" },
     { name = "mcp" },
     { name = "pillow" },
+    { name = "pydantic" },
 ]
 
 [package.metadata]
@@ -49,6 +50,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28,<0.29" },
     { name = "mcp", specifier = ">=1.30,<2" },
     { name = "pillow", specifier = ">=12.3,<13" },
+    { name = "pydantic", specifier = ">=2.11,<3" },
 ]
 
 [[package]]
